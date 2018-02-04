@@ -38,16 +38,18 @@ var (
 // The variables in this block are here so that we can test all error code
 // paths by substituting them with error producing ones.
 var (
-	dsClient, _ = datastore.NewClient(context.Background(), "streamrail-qa") // TODO: put in init func
-	datastoreDeleteMulti = dsClient.DeleteMulti
-	datastoreGetMulti    = dsClient.GetMulti
-	datastorePutMulti    = dsClient.PutMulti
+	DsClient             *datastore.Client
+	datastoreDeleteMulti  = DsClient.DeleteMulti
+	datastoreGetMulti        = DsClient.GetMulti
+	datastorePutMulti        = DsClient.PutMulti
 
-	//memcacheAddMulti            = memcacheAddMulti
-	//memcacheCompareAndSwapMulti = memcacheCompareAndSwapMulti
-	//memcacheDeleteMulti         = memcacheDeleteMulti
-	//memcacheGetMulti            = memcacheGetMulti
-	//memcacheSetMulti            = memcacheSetMulti
+	McClient *memcacheClient
+
+	memcacheAddMulti            = McClient.AddMulti
+	memcacheCompareAndSwapMulti = McClient.CompareAndSwapMulti
+	memcacheDeleteMulti         = McClient.DeleteMulti
+	memcacheGetMulti            = McClient.GetMulti
+	memcacheSetMulti            = McClient.SetMulti
 
 	marshal   = marshalPropertyList
 	unmarshal = unmarshalPropertyList
@@ -65,10 +67,19 @@ const (
 
 func InitNDS(c context.Context, memcacheAddr, datastoreProjectID string) error {
 	var err error
-	if dsClient, err = datastore.NewClient(c, datastoreProjectID); err != nil {
+	if DsClient, err = datastore.NewClient(c, datastoreProjectID); err != nil {
 		return fmt.Errorf("failed to create datastore client")
 	}
-	initMemCache(memcacheAddr)
+	datastoreDeleteMulti  = DsClient.DeleteMulti
+	datastoreGetMulti        = DsClient.GetMulti
+	datastorePutMulti        = DsClient.PutMulti
+
+	McClient = NewMemcache(memcacheAddr)
+	memcacheAddMulti            = McClient.AddMulti
+	memcacheCompareAndSwapMulti = McClient.CompareAndSwapMulti
+	memcacheDeleteMulti         = McClient.DeleteMulti
+	memcacheGetMulti            = McClient.GetMulti
+	memcacheSetMulti            = McClient.SetMulti
 	return nil
 }
 
@@ -77,7 +88,7 @@ func init() {
 		Lat, Lng float64
 	}
 	gob.Register(time.Time{})
-	gob.Register(new([]byte))
+	//gob.Register(new([]byte))
 	gob.Register(&datastore.Key{})
 	gob.Register("")
 	gob.Register(GeoPoint{})

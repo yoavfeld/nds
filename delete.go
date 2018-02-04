@@ -46,6 +46,9 @@ func DeleteMulti(c context.Context, keys []*datastore.Key) error {
 
 // Delete deletes the entity for the given key.
 func Delete(c context.Context, key *datastore.Key) error {
+	if key == nil {
+		return datastore.ErrInvalidKey
+	}
 	err := deleteMulti(c, []*datastore.Key{key})
 	if me, ok := err.(datastore.MultiError); ok {
 		return me[0]
