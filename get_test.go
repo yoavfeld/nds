@@ -5,14 +5,13 @@ import (
 	"reflect"
 	"testing"
 
-	"github.com/qedus/nds"
+	"github.com/yoavfeld/nds"
 
 	"errors"
 
 	"golang.org/x/net/context"
-	"google.golang.org/appengine"
-	"google.golang.org/appengine/datastore"
-	"google.golang.org/appengine/memcache"
+	"cloud.google.com/go/datastore"
+	"github.com/bradfitz/gomemcache/memcache"
 )
 
 func TestGetMultiStruct(t *testing.T) {
@@ -26,7 +25,7 @@ func TestGetMultiStruct(t *testing.T) {
 	keys := []*datastore.Key{}
 	entities := []testEntity{}
 	for i := int64(1); i < 3; i++ {
-		keys = append(keys, datastore.NewKey(c, "Entity", "", i, nil))
+		keys = append(keys, datastore.IDKey("Entity",  i, nil))
 		entities = append(entities, testEntity{i})
 	}
 
@@ -68,7 +67,7 @@ func TestGetMultiStructPtr(t *testing.T) {
 	keys := []*datastore.Key{}
 	entities := []testEntity{}
 	for i := int64(1); i < 3; i++ {
-		keys = append(keys, datastore.NewKey(c, "Entity", "", i, nil))
+		keys = append(keys, datastore.IDKey( "Entity", i, nil))
 		entities = append(entities, testEntity{i})
 	}
 
@@ -117,7 +116,7 @@ func TestGetMultiStructPtrNil(t *testing.T) {
 	keys := []*datastore.Key{}
 	entities := []testEntity{}
 	for i := int64(1); i < 3; i++ {
-		keys = append(keys, datastore.NewKey(c, "Entity", "", i, nil))
+		keys = append(keys, datastore.IDKey( "Entity", i, nil))
 		entities = append(entities, testEntity{i})
 	}
 
@@ -159,7 +158,7 @@ func TestGetMultiInterface(t *testing.T) {
 	keys := []*datastore.Key{}
 	entities := []testEntity{}
 	for i := int64(1); i < 3; i++ {
-		keys = append(keys, datastore.NewKey(c, "Entity", "", i, nil))
+		keys = append(keys, datastore.IDKey( "Entity", i, nil))
 		entities = append(entities, testEntity{i})
 	}
 
@@ -217,7 +216,7 @@ func TestGetMultiPropertyLoadSaver(t *testing.T) {
 	entities := []datastore.PropertyList{}
 
 	for i := 1; i < 3; i++ {
-		keys = append(keys, datastore.NewKey(c, "Entity", "", int64(i), nil))
+		keys = append(keys, datastore.IDKey("Entity",  int64(i), nil))
 
 		pl, err := datastore.SaveStruct(&testEntity{i})
 		if err != nil {
@@ -267,7 +266,7 @@ func TestGetMultiPropertyLoadSaver(t *testing.T) {
 		return nil
 	})
 	defer func() {
-		nds.SetDatastoreGetMulti(datastore.GetMulti)
+		nds.SetDatastoreGetMulti(nds.DsClient.GetMulti)
 	}()
 	tes := make([]testEntity, len(entities))
 	if err := nds.GetMulti(c, keys, tes); err != nil {
@@ -302,7 +301,7 @@ func TestGetMultiInterfaceError(t *testing.T) {
 	keys := []*datastore.Key{}
 	entities := []testEntity{}
 	for i := int64(1); i < 3; i++ {
-		keys = append(keys, datastore.NewKey(c, "Entity", "", i, nil))
+		keys = append(keys, datastore.IDKey("Entity",  i, nil))
 		entities = append(entities, testEntity{i})
 	}
 
@@ -362,7 +361,7 @@ func TestGetArgs(t *testing.T) {
 		t.Fatal("expected error for nil key")
 	}
 
-	key := datastore.NewKey(c, "Entity", "", 1, nil)
+	key := datastore.IDKey("Entity",  1, nil)
 	if err := nds.Get(c, key, nil); err != datastore.ErrInvalidEntityType {
 		t.Fatal("expected ErrInvalidEntityType for nil value")
 	}
@@ -389,7 +388,7 @@ func TestGetMultiArgs(t *testing.T) {
 		IntVal int64
 	}
 
-	key := datastore.NewKey(c, "Entity", "", 1, nil)
+	key := datastore.IDKey("Entity",  1, nil)
 	keys := []*datastore.Key{key}
 	val := testEntity{}
 	if err := nds.GetMulti(c, keys, nil); err == nil {
@@ -422,7 +421,7 @@ func TestGetSliceProperty(t *testing.T) {
 		IntVals []int64
 	}
 
-	key := datastore.NewKey(c, "Entity", "", 1, nil)
+	key := datastore.IDKey("Entity",  1, nil)
 	intVals := []int64{0, 1, 2, 3}
 	val := &testEntity{intVals}
 
@@ -440,7 +439,7 @@ func TestGetSliceProperty(t *testing.T) {
 		t.Fatal("slice properties not equal", val.IntVals)
 	}
 
-	// Get from memcache.
+	// Get from nds.McClient.
 	newVal = &testEntity{}
 	if err := nds.Get(c, key, newVal); err != nil {
 		t.Fatal(err)
@@ -455,7 +454,7 @@ func TestGetMultiNoPropertyList(t *testing.T) {
 	c, closeFunc := NewContext(t)
 	defer closeFunc()
 
-	keys := []*datastore.Key{datastore.NewKey(c, "Test", "", 1, nil)}
+	keys := []*datastore.Key{datastore.IDKey( "Test", 1, nil)}
 	pl := datastore.PropertyList{datastore.Property{}}
 
 	if err := nds.GetMulti(c, keys, pl); err == nil {
@@ -467,7 +466,7 @@ func TestGetMultiNonStruct(t *testing.T) {
 	c, closeFunc := NewContext(t)
 	defer closeFunc()
 
-	keys := []*datastore.Key{datastore.NewKey(c, "Test", "", 1, nil)}
+	keys := []*datastore.Key{datastore.IDKey( "Test", 1, nil)}
 	vals := []int{12}
 
 	if err := nds.GetMulti(c, keys, vals); err == nil {
@@ -486,7 +485,7 @@ func TestGetMultiLockReturnEntitySetValueFail(t *testing.T) {
 	keys := []*datastore.Key{}
 	entities := []testEntity{}
 	for i := int64(1); i < 3; i++ {
-		keys = append(keys, datastore.NewKey(c, "Entity", "", i, nil))
+		keys = append(keys, datastore.IDKey("Entity",  i, nil))
 		entities = append(entities, testEntity{i})
 	}
 
@@ -497,15 +496,15 @@ func TestGetMultiLockReturnEntitySetValueFail(t *testing.T) {
 	// Fail to unmarshal test.
 	memcacheGetChan := make(chan func(c context.Context, keys []string) (
 		map[string]*memcache.Item, error), 2)
-	memcacheGetChan <- memcache.GetMulti
+	memcacheGetChan <- nds.McClient.GetMulti
 	memcacheGetChan <- func(c context.Context,
 		keys []string) (map[string]*memcache.Item, error) {
-		items, err := memcache.GetMulti(c, keys)
+		items, err := nds.McClient.GetMulti(c, keys)
 		if err != nil {
 			return nil, err
 		}
 		pl := datastore.PropertyList{
-			datastore.Property{"One", 1, false, false},
+			datastore.Property{"One", 1, false},
 		}
 		value, err := nds.MarshalPropertyList(pl)
 		if err != nil {
@@ -527,7 +526,7 @@ func TestGetMultiLockReturnEntitySetValueFail(t *testing.T) {
 	if err := nds.GetMulti(c, keys, response); err != nil {
 		t.Fatal(err)
 	}
-	defer nds.SetMemcacheGetMulti(memcache.GetMulti)
+	defer nds.SetMemcacheGetMulti(nds.McClient.GetMulti)
 
 	for i := 0; i < len(keys); i++ {
 		if entities[i].IntVal != response[i].IntVal {
@@ -547,7 +546,7 @@ func TestGetMultiLockReturnEntity(t *testing.T) {
 	keys := []*datastore.Key{}
 	entities := []testEntity{}
 	for i := int64(1); i < 3; i++ {
-		keys = append(keys, datastore.NewKey(c, "Entity", "", i, nil))
+		keys = append(keys, datastore.IDKey("Entity",  i, nil))
 		entities = append(entities, testEntity{i})
 	}
 
@@ -557,15 +556,15 @@ func TestGetMultiLockReturnEntity(t *testing.T) {
 
 	memcacheGetChan := make(chan func(c context.Context, keys []string) (
 		map[string]*memcache.Item, error), 2)
-	memcacheGetChan <- memcache.GetMulti
+	memcacheGetChan <- nds.McClient.GetMulti
 	memcacheGetChan <- func(c context.Context,
 		keys []string) (map[string]*memcache.Item, error) {
-		items, err := memcache.GetMulti(c, keys)
+		items, err := nds.McClient.GetMulti(c, keys)
 		if err != nil {
 			return nil, err
 		}
 		pl := datastore.PropertyList{
-			datastore.Property{"IntVal", int64(5), false, false},
+			datastore.Property{"IntVal", int64(5), false},
 		}
 		value, err := nds.MarshalPropertyList(pl)
 		if err != nil {
@@ -587,7 +586,7 @@ func TestGetMultiLockReturnEntity(t *testing.T) {
 	if err := nds.GetMulti(c, keys, response); err != nil {
 		t.Fatal(err)
 	}
-	defer nds.SetMemcacheGetMulti(memcache.GetMulti)
+	defer nds.SetMemcacheGetMulti(nds.McClient.GetMulti)
 
 	for i := 0; i < len(keys); i++ {
 		if 5 != response[i].IntVal {
@@ -607,7 +606,7 @@ func TestGetMultiLockReturnUnknown(t *testing.T) {
 	keys := []*datastore.Key{}
 	entities := []testEntity{}
 	for i := int64(1); i < 3; i++ {
-		keys = append(keys, datastore.NewKey(c, "Entity", "", i, nil))
+		keys = append(keys, datastore.IDKey("Entity",  i, nil))
 		entities = append(entities, testEntity{i})
 	}
 
@@ -617,10 +616,10 @@ func TestGetMultiLockReturnUnknown(t *testing.T) {
 
 	memcacheGetChan := make(chan func(c context.Context, keys []string) (
 		map[string]*memcache.Item, error), 2)
-	memcacheGetChan <- memcache.GetMulti
+	memcacheGetChan <- nds.McClient.GetMulti
 	memcacheGetChan <- func(c context.Context,
 		keys []string) (map[string]*memcache.Item, error) {
-		items, err := memcache.GetMulti(c, keys)
+		items, err := nds.McClient.GetMulti(c, keys)
 		if err != nil {
 			return nil, err
 		}
@@ -640,7 +639,7 @@ func TestGetMultiLockReturnUnknown(t *testing.T) {
 	if err := nds.GetMulti(c, keys, response); err != nil {
 		t.Fatal(err)
 	}
-	defer nds.SetMemcacheGetMulti(memcache.GetMulti)
+	defer nds.SetMemcacheGetMulti(nds.McClient.GetMulti)
 
 	for i := 0; i < len(keys); i++ {
 		if entities[i].IntVal != response[i].IntVal {
@@ -660,7 +659,7 @@ func TestGetMultiLockReturnMiss(t *testing.T) {
 	keys := []*datastore.Key{}
 	entities := []testEntity{}
 	for i := int64(1); i < 3; i++ {
-		keys = append(keys, datastore.NewKey(c, "Entity", "", i, nil))
+		keys = append(keys, datastore.IDKey("Entity",  i, nil))
 		entities = append(entities, testEntity{i})
 	}
 
@@ -670,10 +669,10 @@ func TestGetMultiLockReturnMiss(t *testing.T) {
 
 	memcacheGetChan := make(chan func(c context.Context, keys []string) (
 		map[string]*memcache.Item, error), 2)
-	memcacheGetChan <- memcache.GetMulti
+	memcacheGetChan <- nds.McClient.GetMulti
 	memcacheGetChan <- func(c context.Context,
 		keys []string) (map[string]*memcache.Item, error) {
-		items, err := memcache.GetMulti(c, keys)
+		items, err := nds.McClient.GetMulti(c, keys)
 		if err != nil {
 			return nil, err
 		}
@@ -692,73 +691,12 @@ func TestGetMultiLockReturnMiss(t *testing.T) {
 	if err := nds.GetMulti(c, keys, response); err != nil {
 		t.Fatal(err)
 	}
-	defer nds.SetMemcacheGetMulti(memcache.GetMulti)
+	defer nds.SetMemcacheGetMulti(nds.McClient.GetMulti)
 
 	for i := 0; i < len(keys); i++ {
 		if entities[i].IntVal != response[i].IntVal {
 			t.Fatal("IntVal not equal")
 		}
-	}
-}
-
-// TestGetNamespacedKey ensures issue https://goo.gl/rXU8nK is fixed so that
-// memcache uses the namespace from the key instead of the context.
-func TestGetNamespacedKey(t *testing.T) {
-	c, closeFunc := NewContext(t)
-	defer closeFunc()
-
-	const intVal = int64(12)
-	type testEntity struct {
-		IntVal int64
-	}
-
-	namespacedCtx, err := appengine.Namespace(c, "keyNamespace")
-	if err != nil {
-		t.Fatal(err)
-	}
-
-	key := datastore.NewKey(c, "Entity", "", 1, nil)
-	namespacedKey := datastore.NewKey(namespacedCtx,
-		"Entity", "", key.IntID(), nil)
-	entity := &testEntity{intVal}
-
-	if namespacedKey, err = nds.Put(c, namespacedKey, entity); err != nil {
-		t.Fatal(err)
-	}
-
-	// Prime cache.
-	if err := nds.Get(namespacedCtx, namespacedKey, &testEntity{}); err != nil {
-		t.Fatal(err)
-	}
-
-	// Ensure that we get a value back from the cache by checking if the
-	// datastore is called at all.
-	entityFromCache := true
-	nds.SetDatastoreGetMulti(func(c context.Context,
-		keys []*datastore.Key, vals interface{}) error {
-		if len(keys) != 0 {
-			entityFromCache = false
-		}
-		return nil
-	})
-	if err := nds.Get(c, namespacedKey, &testEntity{}); err != nil {
-		t.Fatal(err)
-	}
-	nds.SetDatastoreGetMulti(datastore.GetMulti)
-
-	if !entityFromCache {
-		t.Fatal("entity not obtained from cache")
-	}
-
-	if err := nds.Delete(namespacedCtx, namespacedKey); err != nil {
-		t.Fatal(err)
-	}
-
-	entity = &testEntity{}
-	if err := nds.Get(c, namespacedKey, entity); err == nil {
-		t.Fatalf("expected no such entity error but got %+v", entity)
-	} else if err != datastore.ErrNoSuchEntity {
-		t.Fatal(err)
 	}
 }
 
@@ -817,7 +755,7 @@ func TestGetMultiPaths(t *testing.T) {
 
 		keys, vals := make([]*datastore.Key, count), make([]testEntity, count)
 		for i := int64(0); i < count; i++ {
-			keys[i] = datastore.NewKey(c, "Entity", "", i+1, nil)
+			keys[i] = datastore.IDKey("Entity",  i+1, nil)
 			vals[i] = testEntity{i + 1}
 		}
 		return keys, vals
@@ -850,12 +788,12 @@ func TestGetMultiPaths(t *testing.T) {
 			20,
 			1,
 			[]memcacheGetMultiFunc{
-				memcache.GetMulti,
-				memcache.GetMulti,
+				nds.McClient.GetMulti,
+				nds.McClient.GetMulti,
 			},
-			memcache.AddMulti,
-			memcache.CompareAndSwapMulti,
-			datastore.GetMulti,
+			nds.McClient.AddMulti,
+			nds.McClient.CompareAndSwapMulti,
+			nds.DsClient.GetMulti,
 			nds.MarshalPropertyList,
 			[]unmarshalFunc{
 				nds.UnmarshalPropertyList,
@@ -868,11 +806,11 @@ func TestGetMultiPaths(t *testing.T) {
 			2,
 			1,
 			[]memcacheGetMultiFunc{
-				memcache.GetMulti,
-				memcache.GetMulti,
+				nds.McClient.GetMulti,
+				nds.McClient.GetMulti,
 			},
-			memcache.AddMulti,
-			memcache.CompareAndSwapMulti,
+			nds.McClient.AddMulti,
+			nds.McClient.CompareAndSwapMulti,
 			datastoreGetMultiFail,
 			nds.MarshalPropertyList,
 			[]unmarshalFunc{
@@ -886,15 +824,15 @@ func TestGetMultiPaths(t *testing.T) {
 			2,
 			1,
 			[]memcacheGetMultiFunc{
-				memcache.GetMulti,
-				memcache.GetMulti,
+				nds.McClient.GetMulti,
+				nds.McClient.GetMulti,
 			},
-			memcache.AddMulti,
-			memcache.CompareAndSwapMulti,
+			nds.McClient.AddMulti,
+			nds.McClient.CompareAndSwapMulti,
 			func(c context.Context,
 				keys []*datastore.Key, vals interface{}) error {
 
-				me := make(appengine.MultiError, len(keys))
+				me := make(datastore.MultiError, len(keys))
 				for i := range me {
 					me[i] = expectedErr
 				}
@@ -906,7 +844,7 @@ func TestGetMultiPaths(t *testing.T) {
 				nds.UnmarshalPropertyList,
 			},
 			[]error{
-				appengine.MultiError{expectedErr, expectedErr},
+				datastore.MultiError{expectedErr, expectedErr},
 			},
 		},
 		{
@@ -914,12 +852,12 @@ func TestGetMultiPaths(t *testing.T) {
 			5,
 			1,
 			[]memcacheGetMultiFunc{
-				memcache.GetMulti,
-				memcache.GetMulti,
+				nds.McClient.GetMulti,
+				nds.McClient.GetMulti,
 			},
-			memcache.AddMulti,
-			memcache.CompareAndSwapMulti,
-			datastore.GetMulti,
+			nds.McClient.AddMulti,
+			nds.McClient.CompareAndSwapMulti,
+			nds.DsClient.GetMulti,
 			marshalFail,
 			[]unmarshalFunc{
 				nds.UnmarshalPropertyList,
@@ -937,7 +875,7 @@ func TestGetMultiPaths(t *testing.T) {
 			},
 			memcacheAddMultiFail,
 			memcacheCompareAndSwapMultiFail,
-			datastore.GetMulti,
+			nds.DsClient.GetMulti,
 			nds.MarshalPropertyList,
 			[]unmarshalFunc{
 				nds.UnmarshalPropertyList,
@@ -950,12 +888,12 @@ func TestGetMultiPaths(t *testing.T) {
 			20,
 			1,
 			[]memcacheGetMultiFunc{
-				memcache.GetMulti,
+				nds.McClient.GetMulti,
 				memcacheGetMultiFail,
 			},
-			memcache.AddMulti,
-			memcache.CompareAndSwapMulti,
-			datastore.GetMulti,
+			nds.McClient.AddMulti,
+			nds.McClient.CompareAndSwapMulti,
+			nds.DsClient.GetMulti,
 			nds.MarshalPropertyList,
 			[]unmarshalFunc{
 				nds.UnmarshalPropertyList,
@@ -968,24 +906,24 @@ func TestGetMultiPaths(t *testing.T) {
 			2,
 			2,
 			[]memcacheGetMultiFunc{
-				// Charge memcache.
-				memcache.GetMulti,
-				memcache.GetMulti,
-				// Corrupt memcache.
+				// Charge nds.McClient.
+				nds.McClient.GetMulti,
+				nds.McClient.GetMulti,
+				// Corrupt nds.McClient.
 				func(c context.Context, keys []string) (
 					map[string]*memcache.Item, error) {
-					items, err := memcache.GetMulti(c, keys)
+					items, err := nds.McClient.GetMulti(c, keys)
 					// Corrupt items.
 					for _, item := range items {
 						item.Value = []byte("corrupt string")
 					}
 					return items, err
 				},
-				memcache.GetMulti,
+				nds.McClient.GetMulti,
 			},
-			memcache.AddMulti,
-			memcache.CompareAndSwapMulti,
-			datastore.GetMulti,
+			nds.McClient.AddMulti,
+			nds.McClient.CompareAndSwapMulti,
+			nds.DsClient.GetMulti,
 			nds.MarshalPropertyList,
 			[]unmarshalFunc{
 				nds.UnmarshalPropertyList,
@@ -1000,24 +938,24 @@ func TestGetMultiPaths(t *testing.T) {
 			2,
 			2,
 			[]memcacheGetMultiFunc{
-				// Charge memcache.
-				memcache.GetMulti,
-				memcache.GetMulti,
+				// Charge nds.McClient.
+				nds.McClient.GetMulti,
+				nds.McClient.GetMulti,
 				// Corrupt memcache flags.
 				func(c context.Context, keys []string) (
 					map[string]*memcache.Item, error) {
-					items, err := memcache.GetMulti(c, keys)
+					items, err := nds.McClient.GetMulti(c, keys)
 					// Corrupt flags with unknown number.
 					for _, item := range items {
 						item.Flags = 56
 					}
 					return items, err
 				},
-				memcache.GetMulti,
+				nds.McClient.GetMulti,
 			},
-			memcache.AddMulti,
-			memcache.CompareAndSwapMulti,
-			datastore.GetMulti,
+			nds.McClient.AddMulti,
+			nds.McClient.CompareAndSwapMulti,
+			nds.DsClient.GetMulti,
 			nds.MarshalPropertyList,
 			[]unmarshalFunc{
 				nds.UnmarshalPropertyList,
@@ -1032,10 +970,10 @@ func TestGetMultiPaths(t *testing.T) {
 			20,
 			1,
 			[]memcacheGetMultiFunc{
-				memcache.GetMulti,
+				nds.McClient.GetMulti,
 				func(c context.Context, keys []string) (
 					map[string]*memcache.Item, error) {
-					items, err := memcache.GetMulti(c, keys)
+					items, err := nds.McClient.GetMulti(c, keys)
 					// Corrupt flags with unknown number.
 					for _, item := range items {
 						item.Value = []byte("corrupt value")
@@ -1043,9 +981,9 @@ func TestGetMultiPaths(t *testing.T) {
 					return items, err
 				},
 			},
-			memcache.AddMulti,
-			memcache.CompareAndSwapMulti,
-			datastore.GetMulti,
+			nds.McClient.AddMulti,
+			nds.McClient.CompareAndSwapMulti,
+			nds.DsClient.GetMulti,
 			nds.MarshalPropertyList,
 			[]unmarshalFunc{
 				nds.UnmarshalPropertyList,
@@ -1058,10 +996,10 @@ func TestGetMultiPaths(t *testing.T) {
 			2,
 			1,
 			[]memcacheGetMultiFunc{
-				memcache.GetMulti,
+				nds.McClient.GetMulti,
 				func(c context.Context, keys []string) (
 					map[string]*memcache.Item, error) {
-					items, err := memcache.GetMulti(c, keys)
+					items, err := nds.McClient.GetMulti(c, keys)
 					// Corrupt flags with unknown number.
 					for _, item := range items {
 						item.Flags = nds.NoneItem
@@ -1069,16 +1007,16 @@ func TestGetMultiPaths(t *testing.T) {
 					return items, err
 				},
 			},
-			memcache.AddMulti,
-			memcache.CompareAndSwapMulti,
-			datastore.GetMulti,
+			nds.McClient.AddMulti,
+			nds.McClient.CompareAndSwapMulti,
+			nds.DsClient.GetMulti,
 			nds.MarshalPropertyList,
 			[]unmarshalFunc{
 				nds.UnmarshalPropertyList,
 				nds.UnmarshalPropertyList,
 			},
 			[]error{
-				appengine.MultiError{
+				datastore.MultiError{
 					datastore.ErrNoSuchEntity,
 					datastore.ErrNoSuchEntity,
 				},
@@ -1089,10 +1027,10 @@ func TestGetMultiPaths(t *testing.T) {
 			2,
 			1,
 			[]memcacheGetMultiFunc{
-				memcache.GetMulti,
+				nds.McClient.GetMulti,
 				func(c context.Context, keys []string) (
 					map[string]*memcache.Item, error) {
-					items, err := memcache.GetMulti(c, keys)
+					items, err := nds.McClient.GetMulti(c, keys)
 					// Corrupt flags with unknown number.
 					for _, item := range items {
 						item.Flags = nds.EntityItem
@@ -1100,9 +1038,9 @@ func TestGetMultiPaths(t *testing.T) {
 					return items, err
 				},
 			},
-			memcache.AddMulti,
-			memcache.CompareAndSwapMulti,
-			datastore.GetMulti,
+			nds.McClient.AddMulti,
+			nds.McClient.CompareAndSwapMulti,
+			nds.DsClient.GetMulti,
 			nds.MarshalPropertyList,
 			[]unmarshalFunc{
 				nds.UnmarshalPropertyList,
@@ -1174,16 +1112,16 @@ func TestGetMultiPaths(t *testing.T) {
 			if err == nil {
 				t.Fatal("expected error")
 			}
-			expectedMultiErr, isMultiErr := expectedErr.(appengine.MultiError)
+			expectedMultiErr, isMultiErr := expectedErr.(datastore.MultiError)
 
 			if isMultiErr {
-				me, ok := err.(appengine.MultiError)
+				me, ok := err.(datastore.MultiError)
 				if !ok {
-					t.Fatal("expected appengine.MultiError but got", err)
+					t.Fatal("expected datastore.MultiError but got", err)
 				}
 
 				if len(me) != len(expectedMultiErr) {
-					t.Fatal("appengine.MultiError length incorrect")
+					t.Fatal("datastore.MultiError length incorrect")
 				}
 
 				for i, e := range me {
@@ -1201,10 +1139,10 @@ func TestGetMultiPaths(t *testing.T) {
 		}
 
 		// Reset App Engine API calls.
-		nds.SetMemcacheGetMulti(memcache.GetMulti)
-		nds.SetMemcacheAddMulti(memcache.AddMulti)
-		nds.SetMemcacheCompareAndSwapMulti(memcache.CompareAndSwapMulti)
-		nds.SetDatastoreGetMulti(datastore.GetMulti)
+		nds.SetMemcacheGetMulti(nds.McClient.GetMulti)
+		nds.SetMemcacheAddMulti(nds.McClient.AddMulti)
+		nds.SetMemcacheCompareAndSwapMulti(nds.McClient.CompareAndSwapMulti)
+		nds.SetDatastoreGetMulti(nds.DsClient.GetMulti)
 		nds.SetMarshal(nds.MarshalPropertyList)
 		nds.SetUnmarshal(nds.UnmarshalPropertyList)
 
@@ -1225,7 +1163,6 @@ func (lss *loadSaveStruct) Save() ([]datastore.Property, error) {
 			Name:     "Val",
 			Value:    lss.Value,
 			NoIndex:  true,
-			Multiple: false,
 		},
 	}, nil
 }
@@ -1245,7 +1182,7 @@ func TestPropertyLoadSaver(t *testing.T) {
 	defer closeFunc()
 
 	keys := []*datastore.Key{
-		datastore.NewIncompleteKey(ctx, "Entity", nil),
+		datastore.IncompleteKey("Entity", nil),
 	}
 	entities := []*loadSaveStruct{
 		&loadSaveStruct{
@@ -1272,7 +1209,7 @@ func TestUnsupportedValueType(t *testing.T) {
 	defer closeFunc()
 
 	keys := []*datastore.Key{
-		datastore.NewIncompleteKey(ctx, "Entity", nil),
+		datastore.IncompleteKey("Entity", nil),
 	}
 	entities := make([]int, 1)
 	if err := nds.GetMulti(ctx, keys, entities); err == nil {
@@ -1296,7 +1233,7 @@ func TestGetMultiFieldMismatch(t *testing.T) {
 	keys := []*datastore.Key{}
 	entities := []testEntity{}
 	for i := int64(1); i < 3; i++ {
-		keys = append(keys, datastore.NewKey(c, "Entity", "", i, nil))
+		keys = append(keys, datastore.IDKey("Entity",  i, nil))
 		entities = append(entities, testEntity{i, i})
 	}
 
@@ -1310,7 +1247,7 @@ func TestGetMultiFieldMismatch(t *testing.T) {
 
 	// Get from datastore using google api
 	dsResponse := make([]testEntityLean, len(keys))
-	dsErr := datastore.GetMulti(c, keys, dsResponse)
+	dsErr := nds.DsClient.GetMulti(c, keys, dsResponse)
 
 	if ndsErr.Error() != dsErr.Error() {
 		t.Fatal("Errors are not equal")
